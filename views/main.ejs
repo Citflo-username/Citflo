@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Laboratoire du professeur Dwight Houweling</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header .lang-switch {
+            font-size: 0.9rem;
+        }
+        header a {
+            color: #ecf0f1;
+            text-decoration: none;
+            margin-left: 1rem;
+        }
+        main {
+            max-width: 1000px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+            margin-bottom: 2rem;
+        }
+        ul li {
+            margin: 0.5rem 0;
+        }
+        ul li a {
+            text-decoration: none;
+            color: #2980b9;
+        }
+        .research-section {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        .research-block {
+            flex: 1 1 300px;
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .research-block img {
+            max-width: 100%;
+            height: auto;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+        }
+        footer {
+            text-align: center;
+            padding: 1rem;
+            font-size: 0.8rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div><strong>Laboratoire du professeur Dwight Houweling</strong></div>
+        <div class="lang-switch">
+            <a href="/en">English</a> | <a href="/fr">Français</a>
+        </div>
+    </header>
+
+    <main>
+        <h1>Bienvenue au laboratoire de recherche</h1>
+
+        <section>
+            <h2>Visualisations interactives</h2>
+            <ul>
+                <li><a href="/viz/sludge-growth">Croissance des boues activées</a></li>
+                <li><a href="/viz/lagoon-dynamics">Dynamiques des étangs aérés</a></li>
+                <li><a href="/viz/softsensor-demo">Démonstration de softsensor</a></li>
+            </ul>
+        </section>
+
+        <section class="research-section">
+            <div class="research-block">
+                <img src="/images/sludge.jpg" alt="Densification des boues activées">
+                <h3>Densification des boues activées</h3>
+                <p>
+                    Exploration de stratégies innovantes pour améliorer la compaction et la sédimentation dans les procédés à boues activées.
+                    La densification est essentielle pour augmenter la capacité sans agrandir les infrastructures existantes.
+                </p>
+            </div>
+
+            <div class="research-block">
+                <img src="/images/lagoon.jpg" alt="Optimisation des étangs">
+                <h3>Optimisation de la capacité de traitement des étangs</h3>
+                <p>
+                    Études sur les leviers opérationnels, les outils de modélisation et les stratégies de contrôle pour maximiser le rendement
+                    des systèmes de traitement par lagunage dans des climats nordiques.
+                </p>
+            </div>
+
+            <div class="research-block">
+                <img src="/images/softsensor.jpg" alt="Softsensors pour le traitement des eaux">
+                <h3>Softsensors pour le traitement biologique des eaux usées</h3>
+                <p>
+                    Développement d'outils numériques pour inférer des paramètres clés à partir de données en ligne,
+                    améliorant ainsi la supervision, le contrôle et la robustesse des procédés biologiques.
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        © 2025 Laboratoire Citflo – Tous droits réservés.
+    </footer>
+
+</body>
+</html>
