@@ -7,6 +7,9 @@ const port = 3000;
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
+
+app.use(express.static(path.join(__dirname, 'public'))); // ✅ serves ./public as root
+
 app.get('/', (req, res) => {
 	res.render('main'); // Looks for views/main.ejs
 });
