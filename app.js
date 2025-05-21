@@ -15,6 +15,8 @@ const cvEngController = require('./controllers/cvEngController')
 
 
 app.get('/', rootController)
+app.get('/en', rootController)
+app.get('/fr', rootController)
 app.get('/cv-eng', cvEngController)
 
 
