@@ -10,9 +10,13 @@ app.set('views', path.join(__dirname, 'views'));
 
 app.use(express.static(path.join(__dirname, 'public'))); // ✅ serves ./public as root
 
-app.get('/', (req, res) => {
-	res.render('main'); // Looks for views/main.ejs
-});
+const rootController = require('./controllers/root')
+const cvEngController = require('./controllers/cvEngController')
+
+
+app.get('/', rootController)
+app.get('/cv-eng', cvEngController)
+
 
 app.listen(port, () => {
 	console.log(`Server running at http://localhost:${port}`);
