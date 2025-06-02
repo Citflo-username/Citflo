@@ -12,12 +12,14 @@ app.use(express.static(path.join(__dirname, 'public'))); // ✅ serves ./public 
 
 const rootController = require('./controllers/root')
 const cvEngController = require('./controllers/cvEngController')
+const pSankeyController = require('./controllers/pSankeyController')
 
 
 app.get('/', rootController)
 app.get('/en', rootController)
 app.get('/fr', rootController)
 app.get('/cv-eng', cvEngController)
+app.get('/viz/p-sankey', pSankeyController)
 
 
 app.listen(port, () => {

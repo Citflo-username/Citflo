@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bilan de phosphore</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      font-family: Arial, sans-serif;
+    }
+    #graph {
+      flex: 1;
+    }
+    #controls {
+      width: 300px;
+      padding: 20px;
+      background: #f5f5f5;
+      overflow-y: auto;
+      height: 100vh;
+      box-sizing: border-box;
+    }
+    .node-label {
+      font-size: 12px;
+      text-anchor: middle;
+      pointer-events: none;
+      fill: #333;
+    }
+    .tooltip {
+      position: absolute;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      border-radius: 5px;
+      pointer-events: none;
+      font-size: 12px;
+    }
+    #input-controls div {
+      margin-bottom: 20px;
+      padding: 15px;
+      background: white;
+      border-radius: 5px;
+      border: 2px solid #ddd;
+    }
+    #input-controls div.selected {
+      border-color: #1e90ff;
+      background: #f0f8ff;
+    }
+    #input-controls input {
+      width: 60px;
+      margin: 5px;
+      padding: 3px;
+    }
+    #input-controls label {
+      display: inline-block;
+      width: 40px;
+      font-weight: bold;
+    }
+    #thickness-basis {
+      width: 100%;
+      margin-bottom: 20px;
+      padding: 5px;
+    }
+    h3 {
+      margin-top: 0;
+      color: #333;
+    }
+    h1 {
+      margin-top: 1em;
+      margin-left: 1em;
+      color: #333;
+      font-size: 18pt;
+      text-align: center;
+      margin-bottom: 0em;
+      padding-bottom: 0em;
+    }
+  </style>
+</head>
+<body>
+  <div id="graph">
+    
+    <h1>Treated effluent Phosphorus is X mg/L, raising the concentration in the Lake form X to Y mg/L</h1>
+    <h1>What is the impact of urine and fecal diversion on the environment?</h1>
+
+  </div>
+  <div id="controls">
+    <h3>Controls:</h3>
+    <label for="thickness-basis">Arrow Thickness Based On:</label>
+    <select id="thickness-basis">
+      <option value="Q*P">Phosphorus, g P/d</option>
+      <option value="Q*COD">Organic Matter, g COD/d</option>
+      <option value="Q*N">Nitrogen, g N/d</option>
+      <option value="Q">Volume, L/d</option>
+    </select>
+    <div id="input-params"></div>
+    <div id="input-controls"></div>
+  </div>
+
+  <script src="/js/input-json.js"> </script>
+  <script src="/js/script.js"> </script>
+</body>
+</html>
