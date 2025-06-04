@@ -71,7 +71,7 @@
       margin-top: 1em;
       margin-left: 1em;
       color: #333;
-      font-size: 18pt;
+      font-size: 14pt;
       text-align: center;
       margin-bottom: 0em;
       padding-bottom: 0em;
@@ -81,8 +81,9 @@
 <body>
   <div id="graph">
     
-    <h1>Treated effluent Phosphorus is X mg/L, raising the concentration in the Lake form X to Y mg/L</h1>
-    <h1>What is the impact of urine and fecal diversion on the environment?</h1>
+    <h1 id="zeroeth-line"></h1>
+    <h1 id="first-line">Treated effluent Phosphorus is X mg/L, raising the concentration in the Lake form X to Y mg/L</h1>
+    <h1 id="second-line">What is the impact of urine and fecal diversion on the environment?</h1>
 
   </div>
   <div id="controls">
@@ -98,7 +99,9 @@
     <div id="input-controls"></div>
   </div>
 
-  <script src="/js/input-json.js"> </script>
-  <script src="/js/script.js"> </script>
+  <!-- <script src="input-json.js"> </script> -->
+  <!-- <script src="script.js"> </script> -->
+  <script src="../js/script.min.js"> </script>
+  <!-- <script src="translated-script.js"> </script> -->
 </body>
 </html>
