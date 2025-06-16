@@ -3,7 +3,7 @@ const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database('./data.db');
 
 module.exports = (req, res) => {
-    db.all(`SELECT * FROM readings ORDER BY timestamp DESC`, [], (err, rows) => {
+    db.all(`SELECT * FROM readings ORDER BY timestamp ASC`, [], (err, rows) => {
         if (err) {
             console.error("Error reading DB:", err);
             return res.status(500).send("Error retrieving data.");

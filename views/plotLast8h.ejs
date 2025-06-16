@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -25,79 +25,6 @@
   <svg width="800" height="400"></svg>
   <p id="status"></p>
 
-  <!-- <script>
-    fetch('/api/last-8h')
-      .then(res => res.json())
-      .then(data => {
-        if (data.length === 0) {
-          d3.select("#status").text("No data available.");
-          return;
-        }
-
-        // Robust timestamp parser (handles with and without milliseconds)
-        const tryParseTime = d => {
-          let parsed = d3.utcParse("%Y-%m-%dT%H:%M:%S.%LZ")(d);
-          if (!parsed) parsed = d3.utcParse("%Y-%m-%dT%H:%M:%SZ")(d);
-          return parsed;
-        };
-
-        data.forEach(d => {
-          d.timestamp = tryParseTime(d.timestamp);
-          d.voltage = parseFloat(d.voltage);
-        });
-
-        // Filter out any invalid entries
-        data = data.filter(d => d.timestamp && !isNaN(d.voltage));
-
-        if (data.length === 0) {
-          d3.select("#status").text("No valid data to plot.");
-          return;
-        }
-
-        const margin = { top: 20, right: 30, bottom: 30, left: 50 };
-        const width = 800 - margin.left - margin.right;
-        const height = 400 - margin.top - margin.bottom;
-
-        const svg = d3.select("svg")
-          .attr("width", width + margin.left + margin.right)
-          .attr("height", height + margin.top + margin.bottom)
-          .append("g")
-          .attr("transform", `translate(${margin.left},${margin.top})`);
-
-        const x = d3.scaleTime()
-          .domain(d3.extent(data, d => d.timestamp))
-          .range([0, width]);
-
-        const y = d3.scaleLinear()
-          .domain([0, d3.max(data, d => d.voltage) * 1.1])
-          .range([height, 0]);
-
-        const xAxis = d3.axisBottom(x);
-        const yAxis = d3.axisLeft(y);
-
-        svg.append("g")
-          .attr("transform", `translate(0,${height})`)
-          .call(xAxis);
-
-        svg.append("g")
-          .call(yAxis);
-
-        const line = d3.line()
-          .x(d => x(d.timestamp))
-          .y(d => y(d.voltage));
-
-        svg.append("path")
-          .datum(data)
-          .attr("fill", "none")
-          .attr("stroke", "steelblue")
-          .attr("stroke-width", 2)
-          .attr("d", line);
-      })
-      .catch(err => {
-        console.error("Error fetching or rendering data:", err);
-        d3.select("#status").text("Error loading data.");
-      });
-  </script> -->
 <script>
     fetch('/api/last-8h')
         .then(res => res.json())
@@ -155,5 +82,105 @@
 </script>
 
 
+</body>
+</html> -->
+
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Last 8 Hours Plot</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 30px;
+    }
+    svg {
+      border: 1px solid #ccc;
+    }
+    .axis path,
+    .axis line {
+      fill: none;
+      stroke: black;
+      shape-rendering: crispEdges;
+    }
+    button {
+      margin-bottom: 15px;
+      padding: 8px 12px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <button id="downloadBtn">Download All Data (TSV)</button>
+  <h2>Sensor Readings from Last 8 Hours</h2>
+  <svg width="800" height="400"></svg>
+  <p id="status"></p>
+
+<script>
+  document.getElementById("downloadBtn").addEventListener("click", () => {
+    // Create a temporary link to trigger the download
+    const link = document.createElement("a");
+    link.href = "/export/tsv";
+    link.download = "readings.tsv"; // This name is optional since server sets headers
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  });
+
+  fetch('/api/last-8h')
+    .then(res => res.json())
+    .then(data => {
+      data.forEach(d => {
+        const cleanTimestamp = d.timestamp.replace(/(\.\d{3})\d+/, '$1');
+        d.timestamp = d3.utcParse("%Y-%m-%dT%H:%M:%S.%L")(cleanTimestamp);
+        d.voltage = parseFloat(d.voltage);
+      });
+
+      data = data.filter(d => d.timestamp && !isNaN(d.voltage));
+      if (data.length === 0) {
+        d3.select("body").append("p").text("No valid data available.");
+        return;
+      }
+
+      const margin = {top: 20, right: 30, bottom: 30, left: 50};
+      const width = 800 - margin.left - margin.right;
+      const height = 400 - margin.top - margin.bottom;
+
+      const svg = d3.select("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+      const x = d3.scaleTime()
+        .domain(d3.extent(data, d => d.timestamp))
+        .range([0, width]);
+
+      const y = d3.scaleLinear()
+        .domain([0, d3.max(data, d => d.voltage) * 1.1])
+        .range([height, 0]);
+
+      svg.append("g")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(x));
+
+      svg.append("g")
+        .call(d3.axisLeft(y));
+
+      const line = d3.line()
+        .x(d => x(d.timestamp))
+        .y(d => y(d.voltage));
+
+      svg.append("path")
+        .datum(data)
+        .attr("fill", "none")
+        .attr("stroke", "steelblue")
+        .attr("stroke-width", 2)
+        .attr("d", line);
+    });
+</script>
 </body>
 </html>
