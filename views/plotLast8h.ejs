@@ -1,91 +1,3 @@
-<!-- <!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Last 8 Hours Plot</title>
-  <script src="https://d3js.org/d3.v7.min.js"></script>
-  <style>
-    body {
-      font-family: sans-serif;
-      margin: 30px;
-    }
-    svg {
-      border: 1px solid #ccc;
-    }
-    .axis path,
-    .axis line {
-      fill: none;
-      stroke: black;
-      shape-rendering: crispEdges;
-    }
-  </style>
-</head>
-<body>
-  <h2>Sensor Readings from Last 8 Hours</h2>
-  <svg width="800" height="400"></svg>
-  <p id="status"></p>
-
-<script>
-    fetch('/api/last-8h')
-        .then(res => res.json())
-        .then(data => {
-            // Helper: Strip microseconds to milliseconds for D3
-            data.forEach(d => {
-                // Strip to 3 decimal places of second
-                const cleanTimestamp = d.timestamp.replace(/(\.\d{3})\d+/, '$1');
-                d.timestamp = d3.utcParse("%Y-%m-%dT%H:%M:%S.%L")(cleanTimestamp);
-                d.voltage = parseFloat(d.voltage);
-            });
-
-            data = data.filter(d => d.timestamp && !isNaN(d.voltage));
-            if (data.length === 0) {
-                d3.select("body").append("p").text("No valid data available.");
-                return;
-            }
-
-            const margin = {top: 20, right: 30, bottom: 30, left: 50};
-            const width = 800 - margin.left - margin.right;
-            const height = 400 - margin.top - margin.bottom;
-
-            const svg = d3.select("svg")
-                .attr("width", width + margin.left + margin.right)
-                .attr("height", height + margin.top + margin.bottom)
-                .append("g")
-                .attr("transform", `translate(${margin.left},${margin.top})`);
-
-            const x = d3.scaleTime()
-                .domain(d3.extent(data, d => d.timestamp))
-                .range([0, width]);
-
-            const y = d3.scaleLinear()
-                .domain([0, d3.max(data, d => d.voltage) * 1.1])
-                .range([height, 0]);
-
-            svg.append("g")
-                .attr("transform", `translate(0,${height})`)
-                .call(d3.axisBottom(x));
-
-            svg.append("g")
-                .call(d3.axisLeft(y));
-
-            const line = d3.line()
-                .x(d => x(d.timestamp))
-                .y(d => y(d.voltage));
-
-            svg.append("path")
-                .datum(data)
-                .attr("fill", "none")
-                .attr("stroke", "steelblue")
-                .attr("stroke-width", 2)
-                .attr("d", line);
-        });
-</script>
-
-
-</body>
-</html> -->
-
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -107,7 +19,7 @@
       shape-rendering: crispEdges;
     }
     button {
-      margin-bottom: 15px;
+      margin: 10px 10px 20px 0;
       padding: 8px 12px;
       font-size: 14px;
     }
@@ -115,72 +27,197 @@
 </head>
 <body>
   <button id="downloadBtn">Download All Data (TSV)</button>
+  <button id="resetZoomBtn">Reset Zoom</button>
   <h2>Sensor Readings from Last 8 Hours</h2>
   <svg width="800" height="400"></svg>
   <p id="status"></p>
 
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
 <script>
-  document.getElementById("downloadBtn").addEventListener("click", () => {
-    // Create a temporary link to trigger the download
-    const link = document.createElement("a");
-    link.href = "/export/tsv";
-    link.download = "readings.tsv"; // This name is optional since server sets headers
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  });
 
-  fetch('/api/last-8h')
-    .then(res => res.json())
-    .then(data => {
-      data.forEach(d => {
-        const cleanTimestamp = d.timestamp.replace(/(\.\d{3})\d+/, '$1');
-        d.timestamp = d3.utcParse("%Y-%m-%dT%H:%M:%S.%L")(cleanTimestamp);
-        d.voltage = parseFloat(d.voltage);
-      });
+document.getElementById("downloadBtn").addEventListener("click", () => {
+  const link = document.createElement("a");
+  link.href = "/export/tsv";
+  link.download = "readings.tsv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+});
 
-      data = data.filter(d => d.timestamp && !isNaN(d.voltage));
-      if (data.length === 0) {
-        d3.select("body").append("p").text("No valid data available.");
+fetch('/api/last-8h')
+  .then(res => res.json())
+  .then(data => {
+    data.forEach(d => {
+      const cleanTimestamp = d.timestamp.replace(/(\.\d{3})\d+/, '$1');
+      d.timestamp = d3.utcParse("%Y-%m-%dT%H:%M:%S.%L")(cleanTimestamp);
+      d.voltage = parseFloat(d.voltage);
+    });
+
+    data = data.filter(d => d.timestamp && !isNaN(d.voltage));
+    if (data.length === 0) {
+      d3.select("body").append("p").text("No valid data available.");
+      return;
+    }
+
+    const margin = {top: 20, right: 30, bottom: 30, left: 50};
+    const width = 800 - margin.left - margin.right;
+    const height = 400 - margin.top - margin.bottom;
+
+    const svg = d3.select("svg")
+      .attr("width", width + margin.left + margin.right)
+      .attr("height", height + margin.top + margin.bottom);
+
+    const g = svg.append("g")
+      .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const x = d3.scaleTime()
+      .domain(d3.extent(data, d => d.timestamp))
+      .range([0, width]);
+
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(data, d => d.voltage) * 1.1])
+      .range([height, 0]);
+
+    const xAxis = g.append("g")
+      .attr("class", "x-axis")
+      .attr("transform", `translate(0,${height})`)
+      .call(d3.axisBottom(x));
+
+    const yAxis = g.append("g")
+      .attr("class", "y-axis")
+      .call(d3.axisLeft(y));
+
+    const line = d3.line()
+      .x(d => x(d.timestamp))
+      .y(d => y(d.voltage));
+
+    const path = g.append("path")
+      .datum(data)
+      .attr("class", "line")
+      .attr("fill", "none")
+      .attr("stroke", "steelblue")
+      .attr("stroke-width", 2)
+      .attr("d", line);
+
+    // Save original scales for reset
+    const xOriginal = x.copy();
+    const yOriginal = y.copy();
+
+    // Zoom behavior
+    const zoom = d3.zoom()
+      .scaleExtent([1, 20])
+      .translateExtent([[0, 0], [width, height]])
+      .extent([[0, 0], [width, height]])
+      .on("zoom", zoomed)
+      .filter(event => event.type === "wheel");
+
+    svg.call(zoom);
+
+    // Brush for window zoom
+    const brush = d3.brush()
+      .extent([[0, 0], [width, height]])
+      .on("start", brushstarted)
+      .on("end", brushended);
+
+    const brushG = g.append("g")
+      .attr("class", "brush")
+      .call(brush);
+
+    function zoomed(event) {
+      const transform = event.transform;
+
+      const zx = transform.rescaleX(xOriginal);
+      const zy = transform.rescaleY(yOriginal);
+
+      xAxis.call(d3.axisBottom(zx));
+      yAxis.call(d3.axisLeft(zy));
+
+      path.attr("d", line.x(d => zx(d.timestamp)).y(d => zy(d.voltage)));
+      
+      // Update the current scale references
+      x.domain(zx.domain());
+      y.domain(zy.domain());
+    }
+
+    function brushstarted() {
+      // Disable zoom behavior during brush to prevent interference
+      svg.on(".zoom", null);
+    }
+
+    function brushended(event) {
+      if (!event.selection) {
+        // Re-enable zoom if no selection
+        svg.call(zoom);
         return;
       }
 
-      const margin = {top: 20, right: 30, bottom: 30, left: 50};
-      const width = 800 - margin.left - margin.right;
-      const height = 400 - margin.top - margin.bottom;
+      const [[x0, y0], [x1, y1]] = event.selection;
 
-      const svg = d3.select("svg")
-        .attr("width", width + margin.left + margin.right)
-        .attr("height", height + margin.top + margin.bottom)
-        .append("g")
-        .attr("transform", `translate(${margin.left},${margin.top})`);
+      // Calculate new domains from brush selection
+      // x-domain: straightforward conversion from selection coordinates
+      const xMin = x.invert(x0);
+      const xMax = x.invert(x1);
+      
+      // y-domain: need to flip because y0 < y1 but we want higher values at top
+      const yMax = y.invert(y0);  // y0 is the top of selection (smaller SVG coordinate)
+      const yMin = y.invert(y1);  // y1 is the bottom of selection (larger SVG coordinate)
 
-      const x = d3.scaleTime()
-        .domain(d3.extent(data, d => d.timestamp))
-        .range([0, width]);
+      // Update scales based on brush selection
+      x.domain([xMin, xMax]);
+      y.domain([yMin, yMax]);
 
-      const y = d3.scaleLinear()
-        .domain([0, d3.max(data, d => d.voltage) * 1.1])
-        .range([height, 0]);
+      // Update axes with new domains
+      xAxis.transition().duration(500).call(d3.axisBottom(x));
+      yAxis.transition().duration(500).call(d3.axisLeft(y));
+      
+      // Update line path
+      path.transition().duration(500).attr("d", line);
 
-      svg.append("g")
-        .attr("transform", `translate(0,${height})`)
-        .call(d3.axisBottom(x));
+      // Clear brush
+      brushG.call(brush.move, null);
 
-      svg.append("g")
-        .call(d3.axisLeft(y));
+      // Calculate zoom transform to match the new domains
+      const xScale = width / (x1 - x0);
+      const yScale = height / (y1 - y0);
+      const scale = Math.min(xScale, yScale, 20); // Respect scaleExtent
+      
+      // Calculate translation to center the selected area
+      const tx = -x0 * scale;
+      const ty = -y0 * scale;
 
-      const line = d3.line()
-        .x(d => x(d.timestamp))
-        .y(d => y(d.voltage));
+      // Apply new zoom transform silently (without triggering zoom event)
+      svg.property("__zoom", d3.zoomIdentity.translate(tx, ty).scale(scale));
 
-      svg.append("path")
-        .datum(data)
-        .attr("fill", "none")
-        .attr("stroke", "steelblue")
-        .attr("stroke-width", 2)
-        .attr("d", line);
+      // Re-enable zoom behavior for wheel
+      svg.call(zoom);
+    }
+
+    // Reset zoom button
+    document.getElementById("resetZoomBtn").addEventListener("click", () => {
+      // Reset domains to original
+      x.domain(xOriginal.domain());
+      y.domain(yOriginal.domain());
+      
+      // Update axes and path immediately
+      xAxis.call(d3.axisBottom(x));
+      yAxis.call(d3.axisLeft(y));
+      path.attr("d", line.x(d => x(d.timestamp)).y(d => y(d.voltage)));
+      
+      // Reset zoom transform (this will trigger zoomed function, but that's ok now)
+      svg.call(zoom.transform, d3.zoomIdentity);
     });
+  });
+
 </script>
-</body>
-</html>
