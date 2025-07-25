@@ -16,8 +16,8 @@ const dataController = require('./controllers/dataController'); // 🆕
 const exportDataController = require('./controllers/exportDataController');
 const plotLast8hController = require('./controllers/plotLast8hController');
 const apiLast8hController = require('./controllers/apiLast8hController');
-
-
+const analysisController = require('./controllers/analysisController');
+const plotDataAnalyzed = require('./controllers/plotDataAnalyzed');
 
 
 app.get('/', rootController);
@@ -28,6 +28,8 @@ app.get('/viz/p-sankey', pSankeyController);
 app.get('/export/tsv', exportDataController);
 app.get('/viz/last-8h', plotLast8hController);    // returns the page
 app.get('/api/last-8h', apiLast8hController);     // returns the JSON data
+app.get('/viz/data-analyzed', plotDataAnalyzed);    // returns the page
+app.post('/api/analyze', analysisController.runAnalysis);
 
 
 // 🆕 POST endpoint for data

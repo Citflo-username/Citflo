@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Voltage Analysis Dashboard</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 30px;
+    }
+    svg {
+      border: 1px solid #ccc;
+    }
+    .axis path,
+    .axis line {
+      fill: none;
+      stroke: black;
+      shape-rendering: crispEdges;
+    }
+    button {
+      margin: 10px 10px 20px 0;
+      padding: 8px 12px;
+      font-size: 14px;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .peak {
+      fill: red;
+      stroke: darkred;
+      stroke-width: 1;
+    }
+    .valley {
+      fill: green;
+      stroke: darkgreen;
+      stroke-width: 1;
+    }
+    .voltage-line {
+      fill: none;
+      stroke: steelblue;
+      stroke-width: 2;
+    }
+    .our-line {
+      fill: none;
+      stroke: orange;
+      stroke-width: 2;
+    }
+    #stats {
+      background: #f5f5f5;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 5px;
+      font-family: monospace;
+      white-space: pre-line;
+    }
+  </style>
+</head>
+<body>
+  <button id="downloadBtn">Download All Data (TSV)</button>
+  <button id="analyzeBtn">Run Peak Analysis</button>
+  <button id="resetZoomBtn">Reset Zoom</button>
+  
+  <h2>Voltage Analysis Dashboard</h2>
+  <p id="status">Loading data...</p>
+  <div id="stats"></div>
+  
+  <svg width="800" height="700"></svg>
+
+  <script>
+    // Global variables
+    let rawData = [];
+    let analysisData = null;
+    let currentZoomState = null;
+    
+    // Plot dimensions
+    const margin = {top: 20, right: 50, bottom: 30, left: 60};
+    const width = 800 - margin.left - margin.right;
+    const voltageHeight = 300;
+    const ourHeight = 200;
+    const plotGap = 80;
+    
+    // SVG setup
+    const svg = d3.select("svg");
+    
+    // Create two plot groups
+    const voltagePlot = svg.append("g")
+      .attr("transform", `translate(${margin.left},${margin.top})`);
+      
+    const ourPlot = svg.append("g")
+      .attr("transform", `translate(${margin.left},${margin.top + voltageHeight + plotGap})`);
+    
+    // Scales (will be updated with data)
+    let xScale = d3.scaleTime().range([0, width]);
+    let yVoltage = d3.scaleLinear().range([voltageHeight, 0]);
+    let yOUR = d3.scaleLinear().range([ourHeight, 0]);
+    
+    // Line generators
+    const voltageLine = d3.line()
+      .x(d => xScale(d.timestamp))
+      .y(d => yVoltage(d.voltage));
+      
+    const ourLine = d3.line()
+      .x(d => xScale(new Date(d.timestamp)))
+      .y(d => yOUR(d.value));
+    
+    // Event listeners
+    document.getElementById("downloadBtn").addEventListener("click", () => {
+      const link = document.createElement("a");
+      link.href = "/export/tsv";
+      link.download = "readings.tsv";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+    
+    document.getElementById("analyzeBtn").addEventListener("click", runAnalysis);
+    document.getElementById("resetZoomBtn").addEventListener("click", resetZoom);
+    
+    // Load initial data
+    loadRawData();
+    
+    function loadRawData() {
+      d3.select("#status").text("Loading voltage data...");
+      
+      fetch('/api/last-8h')
+        .then(res => res.json())
+        .then(data => {
+          // Process data
+          data.forEach(d => {
+            const cleanTimestamp = d.timestamp.replace(/(\.\d{3})\d+/, '$1');
+            let ts = cleanTimestamp;
+            
+            let parsed = d3.utcParse("%Y-%m-%dT%H:%M:%S.%L")(ts);
+            if (!parsed) {
+              parsed = d3.utcParse("%Y-%m-%dT%H:%M:%SZ")(ts);
+            }
+            
+            d.timestamp = parsed;
+            d.voltage = parseFloat(d.voltage);
+          });
+          
+          rawData = data.filter(d => d.timestamp && !isNaN(d.voltage));
+          
+          if (rawData.length === 0) {
+            d3.select("#status").text("No valid data available.");
+            return;
+          }
+          
+          setupScales();
+          drawVoltageChart();
+          d3.select("#status").text(`Loaded ${rawData.length} data points. Click "Run Peak Analysis" to analyze.`);
+          
+        })
+        .catch(err => {
+          d3.select("#status").text("Error loading data: " + err.message);
+        });
+    }
+    
+    function setupScales() {
+      xScale.domain(d3.extent(rawData, d => d.timestamp));
+      yVoltage.domain([0, d3.max(rawData, d => d.voltage) * 1.1]);
+      
+      // Store original domains for reset
+      xScale.originalDomain = xScale.domain();
+      yVoltage.originalDomain = yVoltage.domain();
+    }
+    
+    function drawVoltageChart() {
+      // Clear previous content
+      voltagePlot.selectAll("*").remove();
+      
+      // Add axes
+      const xAxisVoltage = voltagePlot.append("g")
+        .attr("class", "x-axis-voltage")
+        .attr("transform", `translate(0,${voltageHeight})`)
+        .call(d3.axisBottom(xScale));
+        
+      const yAxisVoltage = voltagePlot.append("g")
+        .attr("class", "y-axis-voltage")
+        .call(d3.axisLeft(yVoltage));
+      
+      // Add axis labels
+      voltagePlot.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", 0 - margin.left)
+        .attr("x", 0 - (voltageHeight / 2))
+        .attr("dy", "1em")
+        .style("text-anchor", "middle")
+        .text("Voltage");
+        
+      voltagePlot.append("text")
+        .attr("transform", `translate(${width/2}, ${voltageHeight + margin.bottom})`)
+        .style("text-anchor", "middle")
+        .text("Time");
+      
+      // Draw voltage line
+      voltagePlot.append("path")
+        .datum(rawData)
+        .attr("class", "voltage-line")
+        .attr("d", voltageLine);
+      
+      // Add title
+      voltagePlot.append("text")
+        .attr("x", width / 2)
+        .attr("y", -5)
+        .attr("text-anchor", "middle")
+        .style("font-size", "16px")
+        .style("font-weight", "bold")
+        .text("Voltage Over Time");
+    }
+    
+    function runAnalysis() {
+      const analyzeBtn = document.getElementById("analyzeBtn");
+      analyzeBtn.disabled = true;
+      d3.select("#status").text("Running peak analysis...");
+      d3.select("#stats").text("");
+      
+      fetch('/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ hours: 8000 })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.error) {
+            throw new Error(data.error);
+          }
+          
+          analysisData = data;
+          updateVisualization();
+          updateStats();
+          d3.select("#status").text("Analysis complete!");
+          analyzeBtn.disabled = false;
+        })
+        .catch(err => {
+          d3.select("#status").text("Analysis failed: " + err.message);
+          analyzeBtn.disabled = false;
+        });
+    }
+    
+    function updateVisualization() {
+      if (!analysisData) return;
+      
+      // Add peaks and valleys to voltage plot
+      addPeaksAndValleys();
+      
+      // Draw OUR plot
+      drawOURChart();
+    }
+    
+    function addPeaksAndValleys() {
+      // Remove existing peaks/valleys
+      voltagePlot.selectAll(".peak").remove();
+      voltagePlot.selectAll(".valley").remove();
+      
+      // Add peaks
+      voltagePlot.selectAll(".peak")
+        .data(analysisData.peaks)
+        .enter().append("circle")
+        .attr("class", "peak")
+        .attr("cx", d => xScale(new Date(d.timestamp)))
+        .attr("cy", d => yVoltage(d.value))
+        .attr("r", 4);
+      
+      // Add valleys
+      voltagePlot.selectAll(".valley")
+        .data(analysisData.valleys)
+        .enter().append("circle")
+        .attr("class", "valley")
+        .attr("cx", d => xScale(new Date(d.timestamp)))
+        .attr("cy", d => yVoltage(d.value))
+        .attr("r", 4);
+    }
+    
+    function drawOURChart() {
+      if (!analysisData.our_values || analysisData.our_values.length === 0) {
+        return;
+      }
+      
+      // Clear previous content
+      ourPlot.selectAll("*").remove();
+      
+      // Update OUR scale domain
+      yOUR.domain(d3.extent(analysisData.our_values, d => d.value));
+      
+      // Add axes
+      const xAxisOUR = ourPlot.append("g")
+        .attr("class", "x-axis-our")
+        .attr("transform", `translate(0,${ourHeight})`)
+        .call(d3.axisBottom(xScale));
+        
+      const yAxisOUR = ourPlot.append("g")
+        .attr("class", "y-axis-our")
+        .call(d3.axisLeft(yOUR));
+      
+      // Add axis labels
+      ourPlot.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", 0 - margin.left)
+        .attr("x", 0 - (ourHeight / 2))
+        .attr("dy", "1em")
+        .style("text-anchor", "middle")
+        .text("OUR (V/h)");
+        
+      ourPlot.append("text")
+        .attr("transform", `translate(${width/2}, ${ourHeight + margin.bottom})`)
+        .style("text-anchor", "middle")
+        .text("Time");
+      
+      // Draw OUR line
+      ourPlot.append("path")
+        .datum(analysisData.our_values)
+        .attr("class", "our-line")
+        .attr("d", ourLine);
+      
+      // Add title
+      ourPlot.append("text")
+        .attr("x", width / 2)
+        .attr("y", -5)
+        .attr("text-anchor", "middle")
+        .style("font-size", "16px")
+        .style("font-weight", "bold")
+        .text("Oxygen Uptake Rate (OUR)");
+    }
+    
+    function updateStats() {
+      if (!analysisData || !analysisData.stats) return;
+      
+      const stats = analysisData.stats;
+      const statsText = `Analysis Results:
+Peaks found: ${stats.peaks_count}
+Valleys found: ${stats.valleys_count}
+Slopes calculated: ${stats.slopes_count}
+
+Slope Statistics:
+Mean slope: ${stats.mean_slope.toFixed(6)} V/s
+Std slope: ${stats.std_slope.toFixed(6)} V/s
+
+OUR Statistics:
+Mean OUR: ${stats.mean_our.toFixed(3)} V/h
+Std OUR: ${stats.std_our.toFixed(3)} V/h`;
+      
+      d3.select("#stats").text(statsText);
+    }
+    
+    function resetZoom() {
+      xScale.domain(xScale.originalDomain);
+      yVoltage.domain(yVoltage.originalDomain);
+      
+      // Redraw everything
+      drawVoltageChart();
+      if (analysisData) {
+        updateVisualization();
+      }
+    }
+    
+    // Add basic zoom functionality
+    const zoom = d3.zoom()
+      .scaleExtent([1, 10])
+      .on("zoom", handleZoom);
+    
+    svg.call(zoom);
+    
+    function handleZoom(event) {
+      const transform = event.transform;
+      
+      const newXScale = transform.rescaleX(xScale);
+      const newYVoltage = transform.rescaleY(yVoltage);
+      
+      // Update voltage chart
+      voltagePlot.select(".x-axis-voltage").call(d3.axisBottom(newXScale));
+      voltagePlot.select(".y-axis-voltage").call(d3.axisLeft(newYVoltage));
+      voltagePlot.select(".voltage-line").attr("d", voltageLine.x(d => newXScale(d.timestamp)).y(d => newYVoltage(d.voltage)));
+      
+      // Update peaks and valleys
+      voltagePlot.selectAll(".peak")
+        .attr("cx", d => newXScale(new Date(d.timestamp)))
+        .attr("cy", d => newYVoltage(d.value));
+      voltagePlot.selectAll(".valley")
+        .attr("cx", d => newXScale(new Date(d.timestamp)))
+        .attr("cy", d => newYVoltage(d.value));
+      
+      // Update OUR chart x-axis (keep y-axis independent)
+      if (analysisData && analysisData.our_values) {
+        ourPlot.select(".x-axis-our").call(d3.axisBottom(newXScale));
+        ourPlot.select(".our-line").attr("d", ourLine.x(d => newXScale(new Date(d.timestamp))));
+      }
+    }
+  </script>
+</body>
+</html>

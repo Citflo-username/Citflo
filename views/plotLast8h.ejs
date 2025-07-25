@@ -61,7 +61,24 @@ fetch('/api/last-8h')
   .then(data => {
     data.forEach(d => {
       const cleanTimestamp = d.timestamp.replace(/(\.\d{3})\d+/, '$1');
-      d.timestamp = d3.utcParse("%Y-%m-%dT%H:%M:%S.%L")(cleanTimestamp);
+      // d.timestamp = d3.utcParse("%Y-%m-%dT%H:%M:%S.%L")(cleanTimestamp);
+
+
+      let ts = d.timestamp;
+
+      // Truncate microseconds to milliseconds (e.g., .805192 → .805)
+      ts = ts.replace(/(\.\d{3})\d+/, "$1");
+
+      // Try parsing with milliseconds
+      let parsed = d3.utcParse("%Y-%m-%dT%H:%M:%S.%L")(ts);
+
+      // If that fails, try parsing without fractional seconds
+      if (!parsed) {
+        parsed = d3.utcParse("%Y-%m-%dT%H:%M:%SZ")(ts);
+      }
+
+      d.timestamp = parsed;
+
       d.voltage = parseFloat(d.voltage);
     });
 
