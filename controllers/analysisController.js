@@ -5,7 +5,7 @@ const db = new sqlite3.Database('./data.db');
 
 module.exports.runAnalysis = (req, res) => {
     // Get the time range (default to last 8 hours)
-    const hoursBack = req.body.hours || 24;
+    const hoursBack = req.body.hours || 96;
     const timeAgo = new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString();
     
     // Fetch raw voltage data from database

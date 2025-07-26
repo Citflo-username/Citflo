@@ -2,7 +2,7 @@ const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database('./data.db');
 
 module.exports = (req, res) => {
-    const eightHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const eightHoursAgo = new Date(Date.now() - 96 * 60 * 60 * 1000).toISOString();
 
     db.all(
         `SELECT * FROM readings WHERE timestamp >= ? ORDER BY timestamp ASC`,
