@@ -28,9 +28,9 @@ def analyze_voltage_data():
         df.set_index('timestamp', inplace=True)
         df['voltage'] = pd.to_numeric(df['voltage'])
         
-        # Take last 10000 points if dataset is large (matching your notebook)
-        if len(df) > 10000:
-            df = df.tail(n=10000)
+        # # Take last 10000 points if dataset is large (matching your notebook)
+        # if len(df) > 10000:
+        #     df = df.tail(n=10000)
         
         voltage_col = 'voltage'
         
