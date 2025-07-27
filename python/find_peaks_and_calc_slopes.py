@@ -4,6 +4,8 @@ import numpy as np
 import json
 import sys
 from scipy.signal import find_peaks, savgol_filter
+from datetime import datetime, timezone
+from scipy import integrate
 
 def analyze_voltage_data():
     try:
@@ -20,17 +22,13 @@ def analyze_voltage_data():
         raw_data = json.loads(input_data)
         
         if len(raw_data) == 0:
-            return {"peaks": [], "valleys": [], "slopes": [], "our_values": []}
+            return {"peaks": [], "valleys": [], "slopes": [], "our_values": [], "cumulative_values": []}
         
         # Convert to DataFrame
         df = pd.DataFrame(raw_data)
         df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601', utc=True)
         df.set_index('timestamp', inplace=True)
         df['voltage'] = pd.to_numeric(df['voltage'])
-        
-        # # Take last 10000 points if dataset is large (matching your notebook)
-        # if len(df) > 10000:
-        #     df = df.tail(n=10000)
         
         voltage_col = 'voltage'
         
@@ -114,6 +112,66 @@ def analyze_voltage_data():
         
         # Calculate OUR (Oxygen Uptake Rate) - convert slopes to per-hour units
         our_df = -slopes_df * 60 * 60  # Convert from V/s to V/h and invert sign
+        our_df.columns = ['our']  # Rename column for clarity
+        
+        # Calculate cumulative area under OUR curve with daily resets
+        cumulative_values = []
+        midnight_resets = []
+        
+        if len(our_df) > 0:
+            # Sort by timestamp to ensure proper order
+            our_df_sorted = our_df.sort_index()
+            
+            # Define your local timezone (adjust as needed)
+            # For Montreal/Toronto: UTC-5 (EST) or UTC-4 (EDT)
+            # You can change this offset based on your location
+            LOCAL_TIMEZONE_OFFSET_HOURS = -5  # EST (change to -4 for EDT, or adjust for your timezone)
+            
+            cumulative = 0
+            current_day = None
+            prev_time = None
+            
+            for timestamp, row in our_df_sorted.iterrows():
+                our_value = row['our']
+                
+                # Convert UTC timestamp to local time for day calculation
+                local_timestamp = timestamp + pd.Timedelta(hours=LOCAL_TIMEZONE_OFFSET_HOURS)
+                current_date = local_timestamp.date()
+                
+                # Check if we've moved to a new day (reset at local midnight)
+                if current_day is not None and current_date != current_day:
+                    # Reset cumulative at local midnight
+                    cumulative = 0
+                    midnight_resets.append(timestamp.isoformat())
+                    sys.stderr.write(f"Daily reset at {timestamp} (local: {local_timestamp})\n")
+                
+                # Calculate time difference in hours for integration
+                if prev_time is not None and current_date == current_day:
+                    time_diff_hours = (timestamp - prev_time).total_seconds() / 3600
+                    # Trapezoidal integration: area = (y1 + y2) * dt / 2
+                    # But since we only have current value, we approximate with rectangular integration
+                    area_increment = our_value * time_diff_hours
+                    cumulative += area_increment
+                
+                cumulative_values.append({
+                    'timestamp': timestamp.isoformat(),
+                    'cumulative': float(cumulative),
+                    'our_value': float(our_value)
+                })
+                
+                current_day = current_date
+                prev_time = timestamp
+        
+        # Calculate statistics for cumulative values
+        cumulative_stats = {}
+        if cumulative_values:
+            cum_vals = [cv['cumulative'] for cv in cumulative_values]
+            cumulative_stats = {
+                'daily_resets_count': len(midnight_resets),
+                'max_daily_cumulative': float(max(cum_vals)) if cum_vals else 0,
+                'min_daily_cumulative': float(min(cum_vals)) if cum_vals else 0,
+                'final_cumulative': float(cum_vals[-1]) if cum_vals else 0
+            }
         
         # Prepare output data
         result = {
@@ -143,18 +201,21 @@ def analyze_voltage_data():
             "our_values": [
                 {
                     "timestamp": time.isoformat(),
-                    "value": float(our_df.loc[time, 'slope'])
+                    "value": float(our_df.loc[time, 'our'])
                 }
                 for time in our_df.index
             ],
+            "cumulative_values": cumulative_values,
+            "midnight_resets": midnight_resets,
             "stats": {
                 "peaks_count": len(peaks_idx),
                 "valleys_count": len(valleys_idx),
                 "slopes_count": len(slopes),
                 "mean_slope": float(slopes_df['slope'].mean()) if len(slopes) > 0 else 0,
                 "std_slope": float(slopes_df['slope'].std()) if len(slopes) > 0 else 0,
-                "mean_our": float(our_df['slope'].mean()) if len(our_df) > 0 else 0,
-                "std_our": float(our_df['slope'].std()) if len(our_df) > 0 else 0
+                "mean_our": float(our_df['our'].mean()) if len(our_df) > 0 else 0,
+                "std_our": float(our_df['our'].std()) if len(our_df) > 0 else 0,
+                **cumulative_stats
             }
         }
         
@@ -166,7 +227,9 @@ def analyze_voltage_data():
             "peaks": [],
             "valleys": [],
             "slopes": [],
-            "our_values": []
+            "our_values": [],
+            "cumulative_values": [],
+            "midnight_resets": []
         }
         print(json.dumps(error_result))
         sys.exit(1)

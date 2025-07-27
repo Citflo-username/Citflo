@@ -47,6 +47,17 @@
       stroke: orange;
       stroke-width: 2;
     }
+    .cumulative-line {
+      fill: none;
+      stroke: purple;
+      stroke-width: 2;
+    }
+    .midnight-line {
+      stroke: red;
+      stroke-width: 1;
+      stroke-dasharray: 3,3;
+      opacity: 0.7;
+    }
     #stats {
       background: #f5f5f5;
       padding: 15px;
@@ -64,9 +75,8 @@
   
   <h2>Voltage Analysis Dashboard</h2>
   <p id="status">Loading data...</p>
-  <!-- <div id="stats"></div> -->
   
-  <svg width="800" height="700"></svg>
+  <svg width="800" height="1000"></svg>
   <div id="stats"></div>
 
   <script>
@@ -78,24 +88,29 @@
     // Plot dimensions
     const margin = {top: 20, right: 50, bottom: 30, left: 60};
     const width = 800 - margin.left - margin.right;
-    const voltageHeight = 300;
+    const voltageHeight = 250;
     const ourHeight = 200;
-    const plotGap = 80;
+    const cumulativeHeight = 200;
+    const plotGap = 60;
     
     // SVG setup
     const svg = d3.select("svg");
     
-    // Create two plot groups
+    // Create three plot groups
     const voltagePlot = svg.append("g")
       .attr("transform", `translate(${margin.left},${margin.top})`);
       
     const ourPlot = svg.append("g")
       .attr("transform", `translate(${margin.left},${margin.top + voltageHeight + plotGap})`);
+      
+    const cumulativePlot = svg.append("g")
+      .attr("transform", `translate(${margin.left},${margin.top + voltageHeight + plotGap + ourHeight + plotGap})`);
     
     // Scales (will be updated with data)
     let xScale = d3.scaleTime().range([0, width]);
     let yVoltage = d3.scaleLinear().range([voltageHeight, 0]);
     let yOUR = d3.scaleLinear().range([ourHeight, 0]);
+    let yCumulative = d3.scaleLinear().range([cumulativeHeight, 0]);
     
     // Line generators
     const voltageLine = d3.line()
@@ -105,6 +120,10 @@
     const ourLine = d3.line()
       .x(d => xScale(new Date(d.timestamp)))
       .y(d => yOUR(d.value));
+      
+    const cumulativeLine = d3.line()
+      .x(d => xScale(new Date(d.timestamp)))
+      .y(d => yCumulative(d.cumulative));
     
     // Event listeners
     document.getElementById("downloadBtn").addEventListener("click", () => {
@@ -191,10 +210,10 @@
         .style("text-anchor", "middle")
         .text("Voltage");
         
-      voltagePlot.append("text")
-        .attr("transform", `translate(${width/2}, ${voltageHeight + margin.bottom})`)
-        .style("text-anchor", "middle")
-        .text("Time");
+      // voltagePlot.append("text")
+      //   .attr("transform", `translate(${width/2}, ${voltageHeight + margin.bottom})`)
+      //   .style("text-anchor", "middle")
+      //   .text("Time");
       
       // Draw voltage line
       voltagePlot.append("path")
@@ -251,6 +270,9 @@
       
       // Draw OUR plot
       drawOURChart();
+      
+      // Draw cumulative plot
+      drawCumulativeChart();
     }
     
     function addPeaksAndValleys() {
@@ -307,10 +329,10 @@
         .style("text-anchor", "middle")
         .text("OUR (V/h)");
         
-      ourPlot.append("text")
-        .attr("transform", `translate(${width/2}, ${ourHeight + margin.bottom})`)
-        .style("text-anchor", "middle")
-        .text("Time");
+      // ourPlot.append("text")
+      //   .attr("transform", `translate(${width/2}, ${ourHeight + margin.bottom})`)
+      //   .style("text-anchor", "middle")
+      //   .text("Time");
       
       // Draw OUR line
       ourPlot.append("path")
@@ -328,6 +350,69 @@
         .text("Oxygen Uptake Rate (OUR)");
     }
     
+    function drawCumulativeChart() {
+      if (!analysisData.cumulative_values || analysisData.cumulative_values.length === 0) {
+        return;
+      }
+      
+      // Clear previous content
+      cumulativePlot.selectAll("*").remove();
+      
+      // Update cumulative scale domain
+      yCumulative.domain(d3.extent(analysisData.cumulative_values, d => d.cumulative));
+      
+      // Add axes
+      const xAxisCumulative = cumulativePlot.append("g")
+        .attr("class", "x-axis-cumulative")
+        .attr("transform", `translate(0,${cumulativeHeight})`)
+        .call(d3.axisBottom(xScale));
+        
+      const yAxisCumulative = cumulativePlot.append("g")
+        .attr("class", "y-axis-cumulative")
+        .call(d3.axisLeft(yCumulative));
+      
+      // Add axis labels
+      cumulativePlot.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", 0 - margin.left)
+        .attr("x", 0 - (cumulativeHeight / 2))
+        .attr("dy", "1em")
+        .style("text-anchor", "middle")
+        .text("Cumulative (V)");
+        
+      // cumulativePlot.append("text")
+      //   .attr("transform", `translate(${width/2}, ${cumulativeHeight + margin.bottom})`)
+      //   .style("text-anchor", "middle")
+      //   .text("Time");
+      
+      // Add midnight reset lines
+      if (analysisData.midnight_resets) {
+        cumulativePlot.selectAll(".midnight-line")
+          .data(analysisData.midnight_resets)
+          .enter().append("line")
+          .attr("class", "midnight-line")
+          .attr("x1", d => xScale(new Date(d)))
+          .attr("x2", d => xScale(new Date(d)))
+          .attr("y1", 0)
+          .attr("y2", cumulativeHeight);
+      }
+      
+      // Draw cumulative line
+      cumulativePlot.append("path")
+        .datum(analysisData.cumulative_values)
+        .attr("class", "cumulative-line")
+        .attr("d", cumulativeLine);
+      
+      // Add title
+      cumulativePlot.append("text")
+        .attr("x", width / 2)
+        .attr("y", -5)
+        .attr("text-anchor", "middle")
+        .style("font-size", "16px")
+        .style("font-weight", "bold")
+        .text("Daily Cumulative Area Under OUR Curve");
+    }
+    
     function updateStats() {
       if (!analysisData || !analysisData.stats) return;
       
@@ -343,7 +428,12 @@ Std slope: ${stats.std_slope.toFixed(6)} V/s
 
 OUR Statistics:
 Mean OUR: ${stats.mean_our.toFixed(3)} V/h
-Std OUR: ${stats.std_our.toFixed(3)} V/h`;
+Std OUR: ${stats.std_our.toFixed(3)} V/h
+
+Cumulative Statistics:
+Daily resets: ${stats.daily_resets_count || 0}
+Max daily cumulative: ${stats.max_daily_cumulative ? stats.max_daily_cumulative.toFixed(3) : 'N/A'} V
+Min daily cumulative: ${stats.min_daily_cumulative ? stats.min_daily_cumulative.toFixed(3) : 'N/A'} V`;
       
       d3.select("#stats").text(statsText);
     }
@@ -389,6 +479,17 @@ Std OUR: ${stats.std_our.toFixed(3)} V/h`;
       if (analysisData && analysisData.our_values) {
         ourPlot.select(".x-axis-our").call(d3.axisBottom(newXScale));
         ourPlot.select(".our-line").attr("d", ourLine.x(d => newXScale(new Date(d.timestamp))));
+      }
+      
+      // Update cumulative chart x-axis
+      if (analysisData && analysisData.cumulative_values) {
+        cumulativePlot.select(".x-axis-cumulative").call(d3.axisBottom(newXScale));
+        cumulativePlot.select(".cumulative-line").attr("d", cumulativeLine.x(d => newXScale(new Date(d.timestamp))));
+        
+        // Update midnight lines
+        cumulativePlot.selectAll(".midnight-line")
+          .attr("x1", d => newXScale(new Date(d)))
+          .attr("x2", d => newXScale(new Date(d)));
       }
     }
   </script>
