@@ -18,6 +18,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database('./data.db');
 
+
 const SECRET_PASSWORD = process.env.SECRET_PASSWORD || "mySecret123";
 
 module.exports = (req, res) => {

@@ -18,7 +18,7 @@ const plotLast8hController = require('./controllers/plotLast8hController');
 const apiLast8hController = require('./controllers/apiLast8hController');
 const analysisController = require('./controllers/analysisController');
 const plotDataAnalyzed = require('./controllers/plotDataAnalyzed');
-
+const cleanDbController = require('./controllers/cleanDbController');
 
 app.get('/', rootController);
 app.get('/en', rootController);
@@ -30,7 +30,7 @@ app.get('/viz/last-8h', plotLast8hController);    // returns the page
 app.get('/api/last-8h', apiLast8hController);     // returns the JSON data
 app.get('/viz/data-analyzed', plotDataAnalyzed);    // returns the page
 app.post('/api/analyze', analysisController.runAnalysis);
-
+app.get('/cleanDb', cleanDbController);
 
 // 🆕 POST endpoint for data
 app.post('/data', dataController);
