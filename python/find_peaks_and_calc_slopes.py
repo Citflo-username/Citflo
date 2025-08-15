@@ -24,24 +24,29 @@ def analyze_voltage_data():
         if len(raw_data) == 0:
             return {"peaks": [], "valleys": [], "slopes": [], "our_values": [], "cumulative_values": []}
         
-        # Convert to DataFrame
+        # Convert to DataFrame - FIXED timestamp parsing
         df = pd.DataFrame(raw_data)
-        df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601', utc=True)
+        df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)  # Removed format='ISO8601' for better parsing
         df.set_index('timestamp', inplace=True)
         df['voltage'] = pd.to_numeric(df['voltage'])
         
+        # Sort by timestamp to ensure proper order
+        df = df.sort_index()
+        
         voltage_col = 'voltage'
+
+        min_threshold = 2
+        max_threshold = 2.4
+        df = df[(df['voltage'] >= min_threshold) & (df['voltage'] <= max_threshold)]
         
         # Apply Savitzky-Golay filter (window_length must be odd)
         window_len = min(51, len(df) // 10 * 2 + 1)  # Adaptive window size, ensure odd
         
         # Handle small datasets
         if len(df) < 10:
-            # For very small datasets, just use the original data
             df['voltage_smooth'] = df[voltage_col]
             sys.stderr.write(f"Warning: Dataset too small ({len(df)} points) for smoothing, using original data\n")
         elif window_len < 5:
-            # Minimum window size for polyorder 3 is 5
             window_len = 5
             if len(df) < window_len:
                 df['voltage_smooth'] = df[voltage_col]
@@ -51,26 +56,127 @@ def analyze_voltage_data():
         else:
             df['voltage_smooth'] = savgol_filter(df[voltage_col], window_len, 3)
         
-        # Find peaks (maxima) - adjust parameters for small datasets
-        min_prominence = 0.1 if len(df) > 100 else 0.01
-        min_distance = 20 if len(df) > 100 else max(1, len(df) // 10)
+        # ADAPTIVE PARAMETERS BASED ON SIGNAL CHARACTERISTICS
         
-        peaks_idx, peak_properties = find_peaks(
-            df['voltage_smooth'], 
-            height=None,        # Minimum peak height (None = no limit)
-            prominence=min_prominence,     # Peak must stand out by this amount
-            distance=min_distance,        # Minimum samples between peaks
-            width=None          # Minimum peak width
-        )
+        # Calculate rolling statistics to adapt parameters
+        rolling_window = max(100, len(df) // 10)  # Adaptive rolling window
+        df['voltage_rolling_std'] = df['voltage_smooth'].rolling(window=rolling_window, center=True).std()
+        df['voltage_rolling_mean'] = df['voltage_smooth'].rolling(window=rolling_window, center=True).mean()
         
-        # Find valleys (minima) by inverting signal
-        valleys_idx, valley_properties = find_peaks(
-            -df['voltage_smooth'],  # Invert signal to find minima
-            height=None,
-            prominence=min_prominence,
-            distance=min_distance,
-            width=None
-        )
+        # Fill NaN values at edges
+        df['voltage_rolling_std'] = df['voltage_rolling_std'].fillna(df['voltage_smooth'].std())
+        df['voltage_rolling_mean'] = df['voltage_rolling_mean'].fillna(df['voltage_smooth'].mean())
+        
+        # Split data into time segments for adaptive analysis
+        time_segments = 3  # Analyze in 3 segments to detect changing patterns
+        segment_size = len(df) // time_segments
+        
+        all_peaks_idx = []
+        all_valleys_idx = []
+        all_peak_properties = {'prominences': []}
+        all_valley_properties = {'prominences': []}
+        
+        for segment in range(time_segments):
+            start_idx = segment * segment_size
+            end_idx = (segment + 1) * segment_size if segment < time_segments - 1 else len(df)
+            
+            if end_idx - start_idx < 10:  # Skip tiny segments
+                continue
+                
+            segment_data = df.iloc[start_idx:end_idx]['voltage_smooth']
+            segment_std = segment_data.std()
+            segment_range = segment_data.max() - segment_data.min()
+            
+            # Adaptive prominence based on local signal characteristics
+            # Use percentage of local standard deviation and range
+            local_prominence = max(
+                segment_std * 0.3,  # 30% of local std deviation
+                segment_range * 0.05,  # 5% of local range
+                0.005  # Minimum absolute prominence
+            )
+            
+            # Adaptive distance based on signal frequency characteristics
+            # Estimate frequency by counting zero-crossings of derivative
+            segment_diff = np.diff(segment_data)
+            zero_crossings = np.sum(np.diff(np.signbit(segment_diff)))
+            estimated_period = len(segment_data) / max(1, zero_crossings / 2)
+            local_distance = max(int(estimated_period * 0.3), 10)  # FIXED: Minimum 10 points distance
+            
+            sys.stderr.write(f"Segment {segment}: prominence={local_prominence:.4f}, distance={local_distance}, std={segment_std:.4f}\n")
+            
+            # Find peaks in this segment
+            peaks_idx_segment, peak_props_segment = find_peaks(
+                segment_data,
+                height=None,
+                prominence=local_prominence,
+                distance=local_distance,
+                width=None
+            )
+            
+            # Find valleys in this segment
+            valleys_idx_segment, valley_props_segment = find_peaks(
+                -segment_data,
+                height=None,
+                prominence=local_prominence,
+                distance=local_distance,
+                width=None
+            )
+            
+            # Adjust indices to global dataframe indices
+            peaks_idx_segment_global = peaks_idx_segment + start_idx
+            valleys_idx_segment_global = valleys_idx_segment + start_idx
+            
+            # Accumulate results
+            all_peaks_idx.extend(peaks_idx_segment_global)
+            all_valleys_idx.extend(valleys_idx_segment_global)
+            all_peak_properties['prominences'].extend(peak_props_segment['prominences'])
+            all_valley_properties['prominences'].extend(valley_props_segment['prominences'])
+        
+        # Convert to numpy arrays and sort
+        peaks_idx = np.array(sorted(all_peaks_idx))
+        valleys_idx = np.array(sorted(all_valleys_idx))
+        
+        # Reorganize properties to match sorted indices
+        if len(all_peak_properties['prominences']) > 0:
+            peak_prominence_dict = dict(zip(all_peaks_idx, all_peak_properties['prominences']))
+            peak_properties = {'prominences': [peak_prominence_dict[idx] for idx in peaks_idx]}
+        else:
+            peak_properties = {'prominences': []}
+            
+        if len(all_valley_properties['prominences']) > 0:
+            valley_prominence_dict = dict(zip(all_valleys_idx, all_valley_properties['prominences']))
+            valley_properties = {'prominences': [valley_prominence_dict[idx] for idx in valleys_idx]}
+        else:
+            valley_properties = {'prominences': []}
+        
+        # FALLBACK: If adaptive method finds too few peaks, try with relaxed global parameters
+        if len(peaks_idx) < 5 and len(df) > 50:  # Only if we expect more peaks
+            sys.stderr.write("Adaptive method found few peaks, trying relaxed global parameters\n")
+            
+            global_std = df['voltage_smooth'].std()
+            global_range = df['voltage_smooth'].max() - df['voltage_smooth'].min()
+            
+            fallback_prominence = max(global_std * 0.1, global_range * 0.02, 0.001)
+            fallback_distance = max(20, len(df) // 50)  # FIXED: Increased minimum distance
+            
+            peaks_fallback, peak_props_fallback = find_peaks(
+                df['voltage_smooth'],
+                prominence=fallback_prominence,
+                distance=fallback_distance
+            )
+            
+            valleys_fallback, valley_props_fallback = find_peaks(
+                -df['voltage_smooth'],
+                prominence=fallback_prominence,
+                distance=fallback_distance
+            )
+            
+            if len(peaks_fallback) > len(peaks_idx):
+                sys.stderr.write(f"Using fallback: found {len(peaks_fallback)} peaks vs {len(peaks_idx)}\n")
+                peaks_idx = peaks_fallback
+                valleys_idx = valleys_fallback
+                peak_properties = peak_props_fallback
+                valley_properties = valley_props_fallback
         
         # Extract peak/valley values and timestamps
         peak_times = df.index[peaks_idx]
@@ -79,7 +185,9 @@ def analyze_voltage_data():
         valley_times = df.index[valleys_idx]
         valley_values = df['voltage_smooth'].iloc[valleys_idx]
         
-        # Calculate slopes from peaks to next valleys
+        sys.stderr.write(f"Found {len(peaks_idx)} peaks and {len(valleys_idx)} valleys\n")
+        
+        # Calculate slopes from peaks to next valleys with IMPROVED logic
         slopes = []
         slope_times = []
         
@@ -97,7 +205,21 @@ def analyze_voltage_data():
                 # Calculate slope: rise/run
                 time_diff = (valley_time - peak_time).total_seconds()  # Convert to seconds
                 voltage_diff = valley_val - peak_val
+                
+                # FIXED: Add validation for reasonable time differences
+                if time_diff < 1 * 60:  # Less than 5 minutes
+                    sys.stderr.write(f"Warning: Very short time difference: {time_diff:.1f} seconds between peak and valley\n")
+                    continue
+                    
+                if time_diff > 7200:  # More than 2 hours
+                    sys.stderr.write(f"Warning: Very long time difference: {time_diff:.1f} seconds between peak and valley\n")
+                    continue
+                
                 slope = voltage_diff / time_diff if time_diff != 0 else np.nan
+                
+                # ADDED: Debug output for slope calculation
+                sys.stderr.write(f"Peak {i}: {peak_val:.4f}V at {peak_time}, Valley: {valley_val:.4f}V at {valley_time}\n")
+                sys.stderr.write(f"  Time diff: {time_diff:.1f}s, Voltage diff: {voltage_diff:.6f}V, Slope: {slope:.8f}V/s\n")
                 
                 # Average time as index
                 avg_time = peak_time + (valley_time - peak_time) / 2
@@ -105,14 +227,31 @@ def analyze_voltage_data():
                 slopes.append(slope)
                 slope_times.append(avg_time)
         
+        sys.stderr.write(f"Calculated {len(slopes)} valid slopes\n")
+        
         # Create slopes DataFrame
         slopes_df = pd.DataFrame({
             'slope': slopes
         }, index=slope_times)
         
-        # Calculate OUR (Oxygen Uptake Rate) - convert slopes to per-hour units
-        our_df = -slopes_df * 60 * 60  # Convert from V/s to V/h and invert sign
-        our_df.columns = ['our']  # Rename column for clarity
+        # FIXED: Calculate OUR (Oxygen Uptake Rate) with proper unit conversion
+        # The slope is in V/s, we need to convert to DO slope first, then to mg O2/L/h
+        # DO = -10.8916 + 7.306502 * V, so dDO/dt = 7.306502 * dV/dt
+        # OUR is the negative of dDO/dt (oxygen consumption), converted to per hour
+        
+        if len(slopes_df) > 0:
+            # Convert voltage slopes to DO slopes: dDO/dt = 7.306502 * dV/dt
+            do_slopes = 7.306502 * slopes_df['slope']  # mg/L per second
+            
+            # Convert to per hour and make positive for oxygen uptake rate
+            our_values = -do_slopes * 3600  # mg O2/L/h (negative because decreasing DO = positive OUR)
+            
+            our_df = pd.DataFrame({'our': our_values}, index=slopes_df.index)
+            
+            sys.stderr.write(f"OUR range: {our_values.min():.3f} to {our_values.max():.3f} mg O2/L/h\n")
+            sys.stderr.write(f"OUR mean: {our_values.mean():.3f} mg O2/L/h\n")
+        else:
+            our_df = pd.DataFrame({'our': []})
         
         # Calculate cumulative area under OUR curve with daily resets
         cumulative_values = []
@@ -123,8 +262,6 @@ def analyze_voltage_data():
             our_df_sorted = our_df.sort_index()
             
             # Define your local timezone (adjust as needed)
-            # For Montreal/Toronto: UTC-5 (EST) or UTC-4 (EDT)
-            # You can change this offset based on your location
             LOCAL_TIMEZONE_OFFSET_HOURS = -5  # EST (change to -4 for EDT, or adjust for your timezone)
             
             cumulative = 0
@@ -148,8 +285,6 @@ def analyze_voltage_data():
                 # Calculate time difference in hours for integration
                 if prev_time is not None and current_date == current_day:
                     time_diff_hours = (timestamp - prev_time).total_seconds() / 3600
-                    # Trapezoidal integration: area = (y1 + y2) * dt / 2
-                    # But since we only have current value, we approximate with rectangular integration
                     area_increment = our_value * time_diff_hours
                     cumulative += area_increment
                 
@@ -179,7 +314,7 @@ def analyze_voltage_data():
                 {
                     "timestamp": time.isoformat(),
                     "value": float(value),
-                    "prominence": float(peak_properties['prominences'][i])
+                    "prominence": float(peak_properties['prominences'][i]) if i < len(peak_properties['prominences']) else 0.0
                 }
                 for i, (time, value) in enumerate(zip(peak_times, peak_values))
             ],
@@ -187,7 +322,7 @@ def analyze_voltage_data():
                 {
                     "timestamp": time.isoformat(),
                     "value": float(value),
-                    "prominence": float(valley_properties['prominences'][i])
+                    "prominence": float(valley_properties['prominences'][i]) if i < len(valley_properties['prominences']) else 0.0
                 }
                 for i, (time, value) in enumerate(zip(valley_times, valley_values))
             ],

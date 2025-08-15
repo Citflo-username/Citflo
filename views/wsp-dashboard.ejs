@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Oxygen Analysis Dashboard</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: white;
+      color: black;
+    }
+    
+    .dashboard-header {
+      background: #f5f5f5;
+      border-bottom: 1px solid #ddd;
+      padding: 12px 20px;
+      text-align: left;
+    }
+    
+    .dashboard-title {
+      font-size: 22px;
+      font-weight: 500;
+      color: black;
+    }
+    
+    .conversion-formula {
+      background: #fafafa;
+      border-bottom: 1px solid #eee;
+      padding: 8px 20px;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+      font-size: 16px;
+      color: black;
+    }
+    
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      height: calc(100vh - 50px);
+    }
+    
+    .chart-container {
+      background: white;
+      border-right: 1px solid #eee;
+      border-bottom: 1px solid #eee;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .chart-container:nth-child(3n) {
+      border-right: none;
+    }
+    
+    .chart-container:nth-child(n+4) {
+      border-bottom: none;
+    }
+    
+    .chart-svg {
+      width: 100%;
+      height: 100%;
+    }
+    
+    .axis text {
+      fill: black;
+      font-size: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    }
+    
+    .axis path,
+    .axis line {
+      stroke: #ddd;
+      stroke-width: 1;
+      fill: none;
+    }
+    
+    .grid-line {
+      stroke: #f5f5f5;
+      stroke-width: 1;
+    }
+    
+    .data-line {
+      fill: none;
+      stroke-width: 1.5;
+    }
+    
+    .dissolved-oxygen-line {
+      stroke: #007aff;
+    }
+    
+    .our-line {
+      stroke: #ff3b30;
+    }
+    
+    .cumulative-line {
+      stroke: #5856d6;
+    }
+    
+    .feed-cod-line {
+      stroke: #ff9500;
+    }
+    
+    .ml-tss-line {
+      stroke: #34c759;
+    }
+    
+    .decant-tss-line {
+      stroke: #ff6b35;
+    }
+    
+    .parameter-label {
+      font-size: 15px;
+      font-weight: 400;
+      fill: black;
+      text-anchor: start;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    }
+    
+    .loading-indicator,
+    .no-data {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: black;
+      font-size: 16px;
+      text-align: center;
+    }
+    
+    @media (max-width: 1200px) {
+      .chart-grid {
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: repeat(3, 1fr);
+      }
+      
+      .chart-container:nth-child(2n) {
+        border-right: none;
+      }
+      
+      .chart-container:nth-child(3n) {
+        border-right: 1px solid #eee;
+      }
+    }
+    
+    @media (max-width: 768px) {
+      .chart-grid {
+        grid-template-columns: 1fr;
+        grid-template-rows: repeat(6, 1fr);
+      }
+      
+      .chart-container {
+        border-right: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard-header">
+    <div class="dashboard-title">Dashboard <span id="status-message"></span></div>
+  </div>
+  
+  <div class="chart-grid">
+    <div class="chart-container" id="dissolved-oxygen-chart">
+      <svg class="chart-svg"></svg>
+      <div class="loading-indicator">Loading data...</div>
+    </div>
+    
+    <div class="chart-container" id="our-chart">
+      <svg class="chart-svg"></svg>
+      <div class="loading-indicator">Loading data...</div>
+    </div>
+    
+    <div class="chart-container" id="cumulative-chart">
+      <svg class="chart-svg"></svg>
+      <div class="loading-indicator">Loading data...</div>
+    </div>
+    
+    <div class="chart-container" id="feed-cod-chart">
+      <svg class="chart-svg"></svg>
+      <div class="no-data">Database integration pending</div>
+    </div>
+    
+    <div class="chart-container" id="ml-tss-chart">
+      <svg class="chart-svg"></svg>
+      <div class="no-data">Database integration pending</div>
+    </div>
+    
+    <div class="chart-container" id="decant-tss-chart">
+      <svg class="chart-svg"></svg>
+      <div class="no-data">Database integration pending</div>
+    </div>
+  </div>
+
+  <script>
+    // Chart class definition
+    class Chart {
+      constructor(containerId, parameterLabel) {
+        this.container = d3.select(`#${containerId}`);
+        this.svg = this.container.select('.chart-svg');
+        this.parameterLabel = parameterLabel;
+        this.data = [];
+        
+        // Chart dimensions
+        this.margin = {top: 20, right: 30, bottom: 30, left: 40};
+        
+        // Get container dimensions
+        this.updateDimensions();
+        
+        // Setup chart elements
+        this.setupChart();
+        
+        // Resize listener
+        window.addEventListener('resize', () => {
+          this.updateDimensions();
+          this.render();
+        });
+      }
+      
+      updateDimensions() {
+        const containerRect = this.container.node().getBoundingClientRect();
+        this.width = containerRect.width - this.margin.left - this.margin.right;
+        this.height = containerRect.height - this.margin.top - this.margin.bottom;
+        
+        this.svg
+          .attr('width', containerRect.width)
+          .attr('height', containerRect.height);
+      }
+      
+      setupChart() {
+        // Clear existing content
+        this.svg.selectAll('*').remove();
+        
+        // Create main group
+        this.g = this.svg.append('g')
+          .attr('transform', `translate(${this.margin.left},${this.margin.top})`);
+        
+        // Create scales
+        this.xScale = d3.scaleTime().range([0, this.width]);
+        this.yScale = d3.scaleLinear().range([this.height, 0]);
+        
+        // Create line generator
+        this.line = d3.line()
+          .x(d => this.xScale(d.timestamp))
+          .y(d => this.yScale(d.value))
+          .curve(d3.curveLinear);
+        
+        // Create axes groups
+        this.xAxisGroup = this.g.append('g')
+          .attr('class', 'x-axis axis')
+          .attr('transform', `translate(0,${this.height})`);
+          
+        this.yAxisGroup = this.g.append('g')
+          .attr('class', 'y-axis axis');
+        
+        // Add parameter label
+        this.g.append('text')
+          .attr('class', 'parameter-label')
+          .attr('x', 8)
+          .attr('y', 15)
+          .text(this.parameterLabel);
+      }
+      
+      setData(data) {
+        this.data = data || [];
+        this.container.select('.loading-indicator').style('display', 'none');
+        this.render();
+      }
+      
+      addPeaksValleys(peaks, valleys) {
+        this.peaks = peaks || [];
+        this.valleys = valleys || [];
+        this.render(); // Re-render to show peaks/valleys
+      }
+      
+      createCustomXAxis(domain) {
+        // Create ticks every 6 hours starting from the nearest midnight before the data starts
+        const [start, end] = domain;
+        const ticks = [];
+        
+        // Find the midnight before or at the start of our data
+        const startMidnight = new Date(start);
+        startMidnight.setHours(0, 0, 0, 0);
+        if (startMidnight < start) {
+          startMidnight.setDate(startMidnight.getDate() + 1);
+        }
+        
+        // Generate ticks every 6 hours from that midnight
+        let currentTick = new Date(startMidnight);
+        while (currentTick <= end) {
+          if (currentTick >= start) {
+            ticks.push(new Date(currentTick));
+          }
+          currentTick.setTime(currentTick.getTime() + 6 * 60 * 60 * 1000); // Add 6 hours
+        }
+        
+        return ticks;
+      }
+      
+      formatXAxisLabel(date) {
+        // Only show day label (d-mmm) at midnight (00:00)
+        if (date.getHours() === 0 && date.getMinutes() === 0) {
+          const day = date.getDate();
+          const month = d3.timeFormat('%b')(date);
+          return `${day}-${month}`;
+        }
+        return ''; // Empty string for non-midnight ticks
+      }
+      
+      render() {
+        if (!this.data || this.data.length === 0) {
+          return;
+        }
+        
+        // Calculate appropriate y-axis range
+        const values = this.data.map(d => d.value);
+        const minValue = d3.min(values);
+        const maxValue = d3.max(values);
+        const range = maxValue - minValue;
+        
+        let yMin, yMax;
+        
+        // Special handling for dissolved oxygen chart - always start from 0
+        if (this.parameterLabel.includes('Diss. O₂')) {
+          yMin = 0;
+          yMax = maxValue * 1.05;
+        } else {
+          // For other charts, use the existing logic
+          if (minValue >= 0 && range < maxValue * 0.1) {
+            // Small range relative to values - use tight bounds with padding
+            yMin = Math.max(0, minValue - range * 0.1);
+            yMax = maxValue + range * 0.1;
+          } else if (minValue >= -range * 0.1) {
+            // Values mostly positive - start from 0
+            yMin = 0;
+            yMax = maxValue * 1.05;
+          } else {
+            // Values span positive and negative - use full range with padding
+            yMin = minValue - range * 0.05;
+            yMax = maxValue + range * 0.05;
+          }
+        }
+        
+        // Update scales
+        const xDomain = d3.extent(this.data, d => d.timestamp);
+        this.xScale.domain(xDomain);
+        this.yScale.domain([yMin, yMax]);
+        
+        // Remove any existing grid lines
+        this.g.selectAll('.grid-line').remove();
+        
+        // Create custom x-axis
+        const xTicks = this.createCustomXAxis(xDomain);
+        
+        // Update x-axis with custom ticks and labels
+        this.xAxisGroup.call(
+          d3.axisBottom(this.xScale)
+            .tickValues(xTicks)
+            .tickFormat(d => this.formatXAxisLabel(d))
+        );
+        
+        // Update y-axis
+        this.yAxisGroup.call(d3.axisLeft(this.yScale)
+          .ticks(4));
+        
+        // Remove existing line and markers
+        this.g.select('.data-line').remove();
+        this.g.selectAll('.peak-marker').remove();
+        this.g.selectAll('.valley-marker').remove();
+        
+        // Add data line
+        this.g.append('path')
+          .datum(this.data)
+          .attr('class', `data-line ${this.getLineClass()}`)
+          .attr('d', this.line);
+          
+        // Add peak markers if this is the dissolved oxygen chart
+        if (this.peaks && this.parameterLabel.includes('Diss. O₂')) {
+          this.g.selectAll('.peak-marker')
+            .data(this.peaks)
+            .enter()
+            .append('circle')
+            .attr('class', 'peak-marker')
+            .attr('cx', d => this.xScale(new Date(d.timestamp)))
+            .attr('cy', d => this.yScale(d.value))
+            .attr('r', 3)
+            .attr('fill', '#ff3b30')
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 1);
+        }
+        
+        // Add valley markers if this is the dissolved oxygen chart
+        if (this.valleys && this.parameterLabel.includes('Diss. O₂')) {
+          this.g.selectAll('.valley-marker')
+            .data(this.valleys)
+            .enter()
+            .append('circle')
+            .attr('class', 'valley-marker')
+            .attr('cx', d => this.xScale(new Date(d.timestamp)))
+            .attr('cy', d => this.yScale(d.value))
+            .attr('r', 3)
+            .attr('fill', '#007aff')
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 1);
+        }
+      }
+      
+      getLineClass() {
+        if (this.parameterLabel.includes('Diss. O₂')) return 'dissolved-oxygen-line';
+        if (this.parameterLabel.includes('OUR')) return 'our-line';
+        if (this.parameterLabel.includes('Cumulative')) return 'cumulative-line';
+        if (this.parameterLabel.includes('COD')) return 'feed-cod-line';
+        if (this.parameterLabel.includes('TSS') && this.container.attr('id').includes('ml')) return 'ml-tss-line';
+        if (this.parameterLabel.includes('TSS') && this.container.attr('id').includes('decant')) return 'decant-tss-line';
+        return 'dissolved-oxygen-line';
+      }
+    }
+    
+    // Global variables
+    let rawData = [];
+    let analysisData = null;
+    
+    // Conversion formula constants
+    const DO_INTERCEPT = -10.8916;
+    const DO_SLOPE = 7.306502;
+    
+    // Initialize all charts
+    const charts = {
+      'dissolved-oxygen': new Chart('dissolved-oxygen-chart', 'Diss. O₂, mg/L'),
+      'our': new Chart('our-chart', 'OUR, mg O₂/L/h'),
+      'cumulative': new Chart('cumulative-chart', 'Cumulative, mg O₂/L'),
+      'feed-cod': new Chart('feed-cod-chart', 'COD, mg/L'),
+      'ml-tss': new Chart('ml-tss-chart', 'TSS, mg/L'),
+      'decant-tss': new Chart('decant-tss-chart', 'TSS, mg/L')
+    };
+    
+    // Load and process data
+    async function loadData() {
+      try {
+        // Load raw voltage data
+        const rawResponse = await fetch('/api/last-8h');
+        const rawVoltageData = await rawResponse.json();
+        
+        // Process voltage data
+        rawData = rawVoltageData.map(d => {
+          const cleanTimestamp = d.timestamp.replace(/(\.\d{3})\d+/, '$1');
+          let parsed = d3.utcParse("%Y-%m-%dT%H:%M:%S.%L")(cleanTimestamp);
+          if (!parsed) {
+            parsed = d3.utcParse("%Y-%m-%dT%H:%M:%SZ")(cleanTimestamp);
+          }
+          
+          const voltage = parseFloat(d.voltage);
+          const dissolvedOxygen = DO_INTERCEPT + DO_SLOPE * voltage;
+          
+          return {
+            timestamp: parsed,
+            voltage: voltage,
+            dissolvedOxygen: dissolvedOxygen
+          };
+        }).filter(d => d.timestamp && !isNaN(d.voltage));
+        
+        // Convert dissolved oxygen data for chart
+        const doData = rawData.map(d => ({
+          timestamp: d.timestamp,
+          value: d.dissolvedOxygen
+        }));
+        
+        charts['dissolved-oxygen'].setData(doData);
+        
+        // Run analysis for OUR and cumulative data
+        await runAnalysis();
+        
+      } catch (error) {
+        console.error('Error loading data:', error);
+        Object.values(charts).forEach(chart => {
+          chart.container.select('.loading-indicator')
+            .text('Error loading data')
+            .style('color', '#ff3b30');
+        });
+      }
+    }
+    
+    async function runAnalysis() {
+      try {
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ hours: 7*24 })
+        });
+        
+        analysisData = await response.json();
+        
+        if (analysisData.error) {
+          throw new Error(analysisData.error);
+        }
+        
+        // Process OUR data - fix the calculation
+        if (analysisData.our_values && analysisData.our_values.length > 0) {
+          const ourData = analysisData.our_values.map(d => ({
+            timestamp: new Date(d.timestamp),
+            value: d.value // The Python script already does the conversion correctly
+          }));
+          charts['our'].setData(ourData);
+        }
+        
+        // Add peaks and valleys to dissolved oxygen chart
+        if (analysisData.peaks || analysisData.valleys) {
+          // Convert peaks and valleys from voltage to dissolved oxygen
+          const convertedPeaks = (analysisData.peaks || []).map(peak => ({
+            ...peak,
+            value: DO_INTERCEPT + DO_SLOPE * peak.value
+          }));
+          
+          const convertedValleys = (analysisData.valleys || []).map(valley => ({
+            ...valley,
+            value: DO_INTERCEPT + DO_SLOPE * valley.value
+          }));
+          
+          charts['dissolved-oxygen'].addPeaksValleys(convertedPeaks, convertedValleys);
+        }
+        
+        // Process cumulative data
+        if (analysisData.cumulative_values && analysisData.cumulative_values.length > 0) {
+          const cumulativeData = analysisData.cumulative_values.map(d => ({
+            timestamp: new Date(d.timestamp),
+            value: d.cumulative
+          }));
+          charts['cumulative'].setData(cumulativeData);
+        }
+        
+      } catch (error) {
+        console.error('Error running analysis:', error);
+        charts['our'].container.select('.loading-indicator')
+          .text('Analysis failed')
+          .style('color', '#ff3b30');
+        charts['cumulative'].container.select('.loading-indicator')
+          .text('Analysis failed')
+          .style('color', '#ff3b30');
+      }
+    }
+    
+    // Load additional database data (placeholder for future implementation)
+    async function loadDatabaseData() {
+      // Placeholder for Feed COD, ML TSS, and Decant TSS data
+      console.log('Database integration pending for COD and TSS data');
+    }
+    
+    // Initialize dashboard
+    function initDashboard() {
+      // Set random status message
+      setRandomStatusMessage();
+      
+      loadData();
+      loadDatabaseData();
+      
+      // Refresh data every 5 minutes
+      setInterval(() => {
+        loadData();
+        loadDatabaseData();
+      }, 5 * 60 * 1000);
+    }
+    
+    // Function to set random status message
+    function setRandomStatusMessage() {
+      const statusMessages = [
+        "Hello Sophie, your bioreactor is hungry. Time to feed.",
+        "Your bioreactor is breathing hard, it has a lot to digest"
+      ];
+      
+      // For now, randomly select a message
+      const randomIndex = Math.floor(Math.random() * statusMessages.length);
+      const selectedMessage = statusMessages[randomIndex];
+      
+      document.getElementById('status-message').textContent = selectedMessage;
+    }
+    
+    // Start dashboard when page loads
+    document.addEventListener('DOMContentLoaded', initDashboard);
+  </script>
+</body>
+</html>

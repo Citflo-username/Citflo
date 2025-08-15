@@ -242,7 +242,7 @@
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ hours: 96 })
+        body: JSON.stringify({ hours: 7*24 })
       })
         .then(res => res.json())
         .then(data => {
@@ -327,7 +327,8 @@
         .attr("x", 0 - (ourHeight / 2))
         .attr("dy", "1em")
         .style("text-anchor", "middle")
-        .text("OUR (V/h)");
+        .text("OUR (mg O2/L/h)");
+        // .text("OUR (V/h)");
         
       // ourPlot.append("text")
       //   .attr("transform", `translate(${width/2}, ${ourHeight + margin.bottom})`)
@@ -378,7 +379,8 @@
         .attr("x", 0 - (cumulativeHeight / 2))
         .attr("dy", "1em")
         .style("text-anchor", "middle")
-        .text("Cumulative (V)");
+        .text("Cumulative (mg O2/L)");
+        // .text("Cumulative (V)");
         
       // cumulativePlot.append("text")
       //   .attr("transform", `translate(${width/2}, ${cumulativeHeight + margin.bottom})`)

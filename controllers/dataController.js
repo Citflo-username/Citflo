@@ -1,19 +1,3 @@
-// // controllers/dataController.js
-// const SECRET_PASSWORD = "mySecret123"; // You can load this from an env variable later
-
-// module.exports = (req, res) => {
-//     const { password, ...data } = req.body;
-
-//     if (password !== SECRET_PASSWORD) {
-//         console.log("Unauthorized POST attempt to /data:", req.body);
-//         return res.status(401).send({ error: "Unauthorized" });
-//     }
-
-//     console.log("Received authorized data:", data);
-//     res.status(200).send({ message: "Data received successfully." });
-// };
-
-
 // controllers/dataController.js
 const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database('./data.db');

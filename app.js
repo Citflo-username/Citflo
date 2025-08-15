@@ -19,6 +19,7 @@ const apiLast8hController = require('./controllers/apiLast8hController');
 const analysisController = require('./controllers/analysisController');
 const plotDataAnalyzed = require('./controllers/plotDataAnalyzed');
 const cleanDbController = require('./controllers/cleanDbController');
+const wspDashboardController = require('./controllers/wspDashboardController');
 
 app.get('/', rootController);
 app.get('/en', rootController);
@@ -28,7 +29,8 @@ app.get('/viz/p-sankey', pSankeyController);
 app.get('/export/tsv', exportDataController);
 app.get('/viz/last-8h', plotLast8hController);    // returns the page
 app.get('/api/last-8h', apiLast8hController);     // returns the JSON data
-app.get('/viz/data-analyzed', plotDataAnalyzed);    // returns the page
+app.get('/viz/data-analyzed', plotDataAnalyzed);
+app.get('/viz/wsp-dashboard', wspDashboardController);
 app.post('/api/analyze', analysisController.runAnalysis);
 app.get('/cleanDb', cleanDbController);
 
